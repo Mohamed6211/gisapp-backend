@@ -36,7 +36,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "replace_with_a_strong_secret";
 // ------------------ AUTH ROUTES ------------------
 
 // Sign up
-appapp.post("/signup", async (req, res) => {
+app.post("/signup", async (req, res) => {
   const { email, password } = req.body;
 
   const existing = await User.findOne({ email });
