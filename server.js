@@ -27,9 +27,7 @@ mongoose.connect(process.env.MONGO_URI)
 // File uploads
 const upload = multer({ dest: "uploads/" });
 
-// Email transporter
-
-
+// Email transporter (SendGrid)
 const transporter = nodemailer.createTransport(
   sgTransport({
     auth: {
@@ -38,9 +36,12 @@ const transporter = nodemailer.createTransport(
   })
 );
 
+// ------------------ TEMP STORAGE FOR PENDING SIGNUPS ------------------
+const pendingSignups = {}; // { email: { passwordHash, code, expires } }
+
 // ------------------ AUTH ROUTES ------------------
 
-// ✅ SIGNUP (send verification code)
+// ✅ SIGNUP (generate verification code, but do NOT create user yet)
 app.post("/signup", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -54,34 +55,35 @@ app.post("/signup", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Generate 6-digit verification code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const user = await User.create({
-      email,
+    // Store in temporary memory
+    pendingSignups[email] = {
       passwordHash,
-      verificationCode: code,
-      verificationCodeExpires: new Date(Date.now() + 10 * 60 * 1000)
-    });
+      code,
+      expires: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    };
 
-    console.log("User created:", email);
-    console.log("Verification code:", code);
+    console.log("Pending signup:", email, code);
 
-    // ✅ SEND EMAIL
+    // Send verification email
     try {
-    await transporter.sendMail({
-  from: "m.elmzouri@enim.ac.ma", // must match SendGrid verified sender
-  to: email,
-  subject: "Your verification code",
-  text: `Your verification code is: ${code}`
-});
+      await transporter.sendMail({
+        from: "m.elmzouri@enim.ac.ma", // must match SendGrid verified sender
+        to: email,
+        subject: "Your verification code",
+        text: `Your verification code is: ${code}`
+      });
 
       console.log("Email sent to:", email);
+      res.json({ message: "Verification code sent" });
     } catch (mailErr) {
       console.error("EMAIL ERROR:", mailErr);
-      return res.status(500).json({ error: "Failed to send email" });
+      // Remove pending signup if email fails
+      delete pendingSignups[email];
+      return res.status(500).json({ error: "Failed to send verification email" });
     }
-
-    res.json({ message: "Verification code sent" });
 
   } catch (err) {
     console.error("Signup error:", err);
@@ -89,32 +91,29 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-// ✅ VERIFY EMAIL
+// ✅ VERIFY EMAIL AND CREATE USER
 app.post("/verify", async (req, res) => {
   try {
     const { email, code } = req.body;
+    const pending = pendingSignups[email];
 
-    const user = await User.findOne({ email });
-    if (!user)
-      return res.status(400).json({ error: "User not found" });
+    if (!pending)
+      return res.status(400).json({ error: "No pending signup for this email" });
 
-    if (
-      user.verificationCode !== code ||
-      user.verificationCodeExpires < new Date()
-    ) {
-      return res.status(400).json({ error: "Invalid or expired code" });
-    }
+    if (pending.code !== code || pending.expires < new Date())
+      return res.status(400).json({ error: "Invalid or expired verification code" });
 
-    user.isVerified = true;
-    user.verificationCode = null;
-    user.verificationCodeExpires = null;
-
-    await user.save();
-
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, {
-      expiresIn: "1h"
+    // Create user in MongoDB after correct verification
+    const user = await User.create({
+      email,
+      passwordHash: pending.passwordHash,
+      isVerified: true
     });
 
+    // Remove from pending storage
+    delete pendingSignups[email];
+
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "1h" });
     res.json({ token });
 
   } catch (err) {
@@ -123,7 +122,7 @@ app.post("/verify", async (req, res) => {
   }
 });
 
-// ✅ LOGIN (ONLY IF VERIFIED)
+// ✅ LOGIN (only verified users)
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -139,10 +138,7 @@ app.post("/login", async (req, res) => {
     if (!valid)
       return res.status(400).json({ error: "Invalid credentials" });
 
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, {
-      expiresIn: "1h"
-    });
-
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "1h" });
     res.json({ token });
 
   } catch (err) {
@@ -176,15 +172,10 @@ app.post("/saveProject", authMiddleware, upload.array("rasters"), async (req, re
     const rasterPaths = req.files ? req.files.map(f => f.path) : [];
 
     await User.findByIdAndUpdate(req.user.userId, {
-      project: {
-        layersJSON,
-        rasterPaths,
-        lastEdited: new Date()
-      }
+      project: { layersJSON, rasterPaths, lastEdited: new Date() }
     });
 
     res.json({ message: "Project saved" });
-
   } catch (err) {
     console.error("Save error:", err);
     res.status(500).json({ error: "Error saving project" });
@@ -195,12 +186,10 @@ app.post("/saveProject", authMiddleware, upload.array("rasters"), async (req, re
 app.get("/loadProject", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
-
     if (!user.project || !user.project.layersJSON)
       return res.status(404).json({ error: "No saved project" });
 
     res.json(user.project);
-
   } catch (err) {
     console.error("Load error:", err);
     res.status(500).json({ error: "Error loading project" });
