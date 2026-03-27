@@ -6,6 +6,7 @@ const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
 const nodemailer = require("nodemailer");
+const sgTransport = require("nodemailer-sendgrid-transport");
 
 const User = require("./models/User");
 
@@ -28,13 +29,13 @@ const upload = multer({ dest: "uploads/" });
 
 // Email transporter
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.sendgrid.net",
-  port: 587,
-  auth: {
-    user: "apikey", // literal string "apikey"
-    pass: process.env.SENDGRID_API_KEY
-  }
+
+const transporter = nodemailer.createTransport(
+  sgTransport({
+    auth: {
+      api_key: process.env.SENDGRID_API_KEY
+    }
+  })
 });
 
 // ------------------ AUTH ROUTES ------------------
