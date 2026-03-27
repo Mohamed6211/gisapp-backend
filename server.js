@@ -68,12 +68,12 @@ app.post("/signup", async (req, res) => {
 
     // ✅ SEND EMAIL
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: "GIS App Verification Code",
-        text: `Your verification code is: ${code}`
-      });
+    await transporter.sendMail({
+  from: "m.elmzouri@enim.ac.ma", // must match SendGrid verified sender
+  to: email,
+  subject: "Your verification code",
+  text: `Your verification code is: ${code}`
+});
 
       console.log("Email sent to:", email);
     } catch (mailErr) {
