@@ -36,7 +36,7 @@ const transporter = nodemailer.createTransport(
       api_key: process.env.SENDGRID_API_KEY
     }
   })
-});
+);
 
 // ------------------ AUTH ROUTES ------------------
 
