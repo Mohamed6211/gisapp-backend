@@ -36,16 +36,33 @@ const JWT_SECRET = process.env.JWT_SECRET || "replace_with_a_strong_secret";
 // ------------------ AUTH ROUTES ------------------
 
 // Sign up
-app.post("/signup", async (req, res) => {
+appapp.post("/signup", async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
-  try {
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, passwordHash });
-    res.json({ message: "User created" });
-  } catch (err) {
-    res.status(400).json({ error: "User exists or invalid data" });
-  }
+
+  const existing = await User.findOne({ email });
+  if (existing) return res.status(400).json({ error: "User already exists" });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // generate 6-digit code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+  const user = await User.create({
+    email,
+    passwordHash,
+    verificationCode: code,
+    verificationCodeExpires: new Date(Date.now() + 10 * 60 * 1000) // 10 min
+  });
+
+  // send email
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: "Your verification code",
+    text: `Your verification code is: ${code}`
+  });
+
+  res.json({ message: "Verification code sent" });
 });
 
 // Login
