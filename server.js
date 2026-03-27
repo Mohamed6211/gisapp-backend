@@ -77,7 +77,29 @@ app.post("/login", async (req, res) => {
   const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "1h" });
   res.json({ token });
 });
+app.post("/verify", async (req, res) => {
+  const { email, code } = req.body;
 
+  const user = await User.findOne({ email });
+  if (!user) return res.status(400).json({ error: "User not found" });
+
+  if (
+    user.verificationCode !== code ||
+    user.verificationCodeExpires < new Date()
+  ) {
+    return res.status(400).json({ error: "Invalid or expired code" });
+  }
+
+  user.isVerified = true;
+  user.verificationCode = null;
+  user.verificationCodeExpires = null;
+  await user.save();
+
+  // issue JWT after verification
+  const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "1h" });
+
+  res.json({ token });
+});
 // Middleware to verify token
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
