@@ -166,15 +166,12 @@ function authMiddleware(req, res, next) {
 // ------------------ PROJECT ROUTES ------------------
 
 // ✅ SAVE PROJECT
-app.post("/saveProject", authMiddleware, upload.array("rasters"), async (req, res) => {
+app.post("/saveProject", authMiddleware, async (req, res) => {
   try {
-    const { layersJSON } = req.body;
-    const rasterPaths = req.files ? req.files.map(f => f.path) : [];
-
+    const { layersJSON } = req.body;  // <- JSON body, no Multer
     await User.findByIdAndUpdate(req.user.userId, {
-      project: { layersJSON, rasterPaths, lastEdited: new Date() }
+      project: { layersJSON, lastEdited: new Date() }
     });
-
     res.json({ message: "Project saved" });
   } catch (err) {
     console.error("Save error:", err);
