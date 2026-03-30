@@ -115,7 +115,7 @@ app.post("/verify", async (req, res) => {
     // Remove from pending storage
     delete pendingSignups[email];
 
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
     res.json({ token });
 
   } catch (err) {
@@ -140,7 +140,7 @@ app.post("/login", async (req, res) => {
     if (!valid)
       return res.status(400).json({ error: "Invalid credentials" });
 
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
     res.json({ token });
 
   } catch (err) {
